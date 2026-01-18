@@ -1,0 +1,27 @@
+version: "3"
+
+tasks:
+  run:
+    desc: Run the server
+    cmds:
+      - go run ./cmd/server
+
+  build:
+    desc: Build the server binary
+    cmds:
+      - go build -o bin/server ./cmd/server
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: Format code
+    cmds:
+      - gofmt -w .
+
+  tidy:
+    desc: Tidy go.mod and go.sum
+    cmds:
+      - go mod tidy
