@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"task-manager/internal/config"
 	"task-manager/internal/infrastructure"
@@ -29,7 +32,18 @@ func main() {
 		log.Error("failed to connect to db", zap.Error(err))
 		return
 	}
-	defer db.Close()
 
-	log.Info("connected to database successfully")
+	log.Info("server is starting", zap.String("env", cfg.Logger.Env))
+
+	// Graceful Shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case s := <-quit:
+		log.Info("shutting down server", zap.String("signal", s.String()))
+	}
+
+	db.Close()
+	log.Info("server stopped")
 }
