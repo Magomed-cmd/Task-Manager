@@ -5,9 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"task-manager/internal/infrastructure/db"
 
 	"task-manager/internal/config"
-	"task-manager/internal/infrastructure"
 	"task-manager/internal/logger"
 
 	"go.uber.org/zap"
@@ -27,7 +27,7 @@ func main() {
 	}
 	defer func() { _ = log.Sync() }()
 
-	db, err := infrastructure.ConnectToDB(cfg.GetDSN(), log)
+	db, err := db.ConnectToDB(cfg.GetDSN(), log)
 	if err != nil {
 		log.Error("failed to connect to db", zap.Error(err))
 		return
@@ -35,7 +35,6 @@ func main() {
 
 	log.Info("server is starting", zap.String("env", cfg.Logger.Env))
 
-	// Graceful Shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 

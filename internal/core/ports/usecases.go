@@ -6,8 +6,8 @@ import (
 )
 
 type TaskUseCases interface {
-	GetTasks(ctx context.Context, userID string) ([]*entities.Task, []*entities.TaskProgress, error)
+	GetTasksWithProgress(ctx context.Context, userID string) ([]*entities.Task, []*entities.TaskProgress, error)
 	GetTask(ctx context.Context, taskID string) (*entities.Task, error)
 	ProcessEvent(ctx context.Context, event *entities.TaskEvent) error
-	ClaimReward(ctx context.Context, userID, taskID string) error
+	ClaimReward(ctx context.Context, userID string, taskID string) error
 }
