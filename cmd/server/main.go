@@ -19,7 +19,5 @@ func main() {
 		fmt.Printf("logger init error: %v\n", err)
 		return
 	}
-	defer log.Sync()
-
-	fmt.Println("Иба чотка")
+	_ = log.Sync()
 }

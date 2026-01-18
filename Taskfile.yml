@@ -1,5 +1,7 @@
 version: "3"
 
+dotenv: [".env"]
+
 tasks:
   run:
     desc: Run the server
@@ -25,3 +27,27 @@ tasks:
     desc: Tidy go.mod and go.sum
     cmds:
       - go mod tidy
+
+  migrate:up:
+    desc: Apply all migrations
+    env:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "user={{.POSTGRES_USER}} password={{.POSTGRES_PASSWORD}} dbname={{.POSTGRES_DB}} sslmode=disable host=localhost port={{.POSTGRES_PORT}}"
+    cmds:
+      - goose -dir migrations up
+
+  migrate:down:
+    desc: Rollback the last migration
+    env:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "user={{.POSTGRES_USER}} password={{.POSTGRES_PASSWORD}} dbname={{.POSTGRES_DB}} sslmode=disable host=localhost port={{.POSTGRES_PORT}}"
+    cmds:
+      - goose -dir migrations down
+
+  migrate:status:
+    desc: Show migration status
+    env:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "user={{.POSTGRES_USER}} password={{.POSTGRES_PASSWORD}} dbname={{.POSTGRES_DB}} sslmode=disable host=localhost port={{.POSTGRES_PORT}}"
+    cmds:
+      - goose -dir migrations status
