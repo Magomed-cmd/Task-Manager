@@ -44,6 +44,15 @@ func Load() (*Config, error) {
 	}, nil
 }
 
+func (c *Config) GetDSN() string {
+	return fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable",
+		c.Database.User,
+		c.Database.Password,
+		c.Database.Port,
+		c.Database.Name,
+	)
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

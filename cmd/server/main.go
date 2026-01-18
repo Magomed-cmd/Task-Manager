@@ -4,7 +4,10 @@ import (
 	"fmt"
 
 	"task-manager/internal/config"
+	"task-manager/internal/infrastructure"
 	"task-manager/internal/logger"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -19,5 +22,14 @@ func main() {
 		fmt.Printf("logger init error: %v\n", err)
 		return
 	}
-	_ = log.Sync()
+	defer func() { _ = log.Sync() }()
+
+	db, err := infrastructure.ConnectToDB(cfg.GetDSN(), log)
+	if err != nil {
+		log.Error("failed to connect to db", zap.Error(err))
+		return
+	}
+	defer db.Close()
+
+	log.Info("connected to database successfully")
 }
