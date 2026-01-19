@@ -12,7 +12,8 @@ type TaskRepository interface {
 
 type ProgressRepository interface {
 	Get(ctx context.Context, userID string, taskID string) (*entities.TaskProgress, error)
-	Save(ctx context.Context, progress *entities.TaskProgress) error
+	Create(ctx context.Context, progress *entities.TaskProgress) error
+	Update(ctx context.Context, progress *entities.TaskProgress) error
 }
 
 type EventRepository interface {

@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"task-manager/internal/infrastructure/db"
 
 	"task-manager/internal/config"
+	"task-manager/internal/infrastructure/db"
 	"task-manager/internal/logger"
 
 	"go.uber.org/zap"
@@ -32,6 +33,11 @@ func main() {
 		log.Error("failed to connect to db", zap.Error(err))
 		return
 	}
+	defer db.Close()
+
+	if os.Getenv("RUN_REPO_SMOKE") == "1" {
+		runRepoSmokeTest(context.Background(), log, db)
+	}
 
 	log.Info("server is starting", zap.String("env", cfg.Logger.Env))
 
@@ -43,6 +49,5 @@ func main() {
 		log.Info("shutting down server", zap.String("signal", s.String()))
 	}
 
-	db.Close()
 	log.Info("server stopped")
 }
