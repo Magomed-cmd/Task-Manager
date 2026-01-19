@@ -6,6 +6,7 @@ import (
 	"task-manager/internal/core/domain/entities"
 	"task-manager/internal/core/domain/exceptions"
 	"task-manager/internal/infrastructure/db"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -33,16 +34,25 @@ func (r *TaskRepository) GetByID(ctx context.Context, id string) (*entities.Task
 	query := `SELECT id, title, description, type, target, reward, is_active, created_at
 		FROM tasks WHERE id = $1`
 
-	task := entities.Task{}
+	var (
+		taskID      string
+		title       string
+		description string
+		taskType    entities.TaskType
+		target      int
+		reward      []byte
+		isActive    bool
+		createdAt   time.Time
+	)
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&task.ID,
-		&task.Title,
-		&task.Description,
-		&task.Type,
-		&task.Target,
-		&task.Reward,
-		&task.IsActive,
-		&task.CreatedAt,
+		&taskID,
+		&title,
+		&description,
+		&taskType,
+		&target,
+		&reward,
+		&isActive,
+		&createdAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -50,7 +60,7 @@ func (r *TaskRepository) GetByID(ctx context.Context, id string) (*entities.Task
 		}
 		return nil, err
 	}
-	return &task, nil
+	return entities.NewTask(taskID, title, description, taskType, target, reward, isActive, createdAt), nil
 }
 
 func (r *TaskRepository) ListActive(ctx context.Context) ([]*entities.Task, error) {
@@ -66,21 +76,30 @@ func (r *TaskRepository) ListActive(ctx context.Context) ([]*entities.Task, erro
 
 	tasks := make([]*entities.Task, 0)
 	for rows.Next() {
-		task := entities.Task{}
+		var (
+			taskID      string
+			title       string
+			description string
+			taskType    entities.TaskType
+			target      int
+			reward      []byte
+			isActive    bool
+			createdAt   time.Time
+		)
 		if err := rows.Scan(
-			&task.ID,
-			&task.Title,
-			&task.Description,
-			&task.Type,
-			&task.Target,
-			&task.Reward,
-			&task.IsActive,
-			&task.CreatedAt,
+			&taskID,
+			&title,
+			&description,
+			&taskType,
+			&target,
+			&reward,
+			&isActive,
+			&createdAt,
 		); err != nil {
 			r.log.Error("failed to scan task row", zap.Error(err))
 			return nil, err
 		}
-		tasks = append(tasks, &task)
+		tasks = append(tasks, entities.NewTask(taskID, title, description, taskType, target, reward, isActive, createdAt))
 	}
 
 	if err := rows.Err(); err != nil {
