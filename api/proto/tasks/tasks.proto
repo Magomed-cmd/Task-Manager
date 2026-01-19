@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package tasks.v1;
+
+option go_package = "task-manager/pkg/grpc/gen/tasks/v1;tasksv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "validate/validate.proto";
+
+service TaskService {
+  rpc GetTasksWithProgress(GetTasksWithProgressRequest) returns (GetTasksWithProgressResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc ProcessEvent(ProcessEventRequest) returns (ProcessEventResponse);
+  rpc ClaimReward(ClaimRewardRequest) returns (ClaimRewardResponse);
+}
+
+message Task {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string type = 4;
+  int32 target = 5;
+  bytes reward_json = 6;
+  bool is_active = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message TaskProgress {
+  string id = 1;
+  string task_id = 2;
+  string user_id = 3;
+  int32 progress = 4;
+  bool completed = 5;
+  bool claimed = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message TaskEvent {
+  string event_id = 1 [(validate.rules).string = {min_len: 1, uuid: true}];
+  string user_id = 2 [(validate.rules).string.min_len = 1];
+  string room_id = 3;
+  string type = 4 [(validate.rules).string.min_len = 1];
+  google.protobuf.Struct payload = 5;
+  google.protobuf.Timestamp created_at = 6 [(validate.rules).timestamp.required = true];
+}
+
+message GetTasksWithProgressRequest {
+  string user_id = 1 [(validate.rules).string.min_len = 1];
+}
+
+message GetTasksWithProgressResponse {
+  repeated Task tasks = 1;
+  repeated TaskProgress progress = 2;
+}
+
+message GetTaskRequest {
+  string task_id = 1 [(validate.rules).string = {min_len: 1, uuid: true}];
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+message ProcessEventRequest {
+  TaskEvent event = 1 [(validate.rules).message.required = true];
+}
+
+message ProcessEventResponse {
+  bool accepted = 1;
+  TaskProgress progress = 2;
+}
+
+message ClaimRewardRequest {
+  string user_id = 1 [(validate.rules).string.min_len = 1];
+  string task_id = 2 [(validate.rules).string = {min_len: 1, uuid: true}];
+}
+
+message ClaimRewardResponse {
+  TaskProgress progress = 1;
+}

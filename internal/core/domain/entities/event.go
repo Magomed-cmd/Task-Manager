@@ -45,22 +45,6 @@ func NewTaskEvent(eventID, userID, roomID string, eventType TaskEventType, paylo
 	return event, nil
 }
 
-func (e *TaskEvent) Validate() error {
-	if e == nil {
-		return exceptions.ErrEventNil
-	}
-	if e.eventID == "" {
-		return exceptions.ErrEventIDRequired
-	}
-	if e.userID == "" {
-		return exceptions.ErrEventUserIDRequired
-	}
-	if e.eventType == "" {
-		return exceptions.ErrEventTypeRequired
-	}
-	return nil
-}
-
 func (e *TaskEvent) EventID() string {
 	return e.eventID
 }
@@ -94,4 +78,20 @@ func (e *TaskEvent) ProcessedAt() time.Time {
 
 func (e *TaskEvent) SetProcessedAt(at time.Time) {
 	e.processedAt = at
+}
+
+func (e *TaskEvent) Validate() error {
+	if e == nil {
+		return exceptions.ErrEventNil
+	}
+	if e.eventID == "" {
+		return exceptions.ErrEventIDRequired
+	}
+	if e.userID == "" {
+		return exceptions.ErrEventUserIDRequired
+	}
+	if e.eventType == "" {
+		return exceptions.ErrEventTypeRequired
+	}
+	return nil
 }

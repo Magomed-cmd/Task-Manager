@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Logger   LoggerConfig
 	Database DatabaseConfig
+	GRPC     GRPCConfig
 }
 
 type LoggerConfig struct {
@@ -24,6 +25,10 @@ type DatabaseConfig struct {
 	User     string
 	Password string
 	Port     int
+}
+
+type GRPCConfig struct {
+	Port int
 }
 
 func Load() (*Config, error) {
@@ -40,6 +45,9 @@ func Load() (*Config, error) {
 			User:     getEnv("POSTGRES_USER", "task_manager"),
 			Password: getEnv("POSTGRES_PASSWORD", "task_manager"),
 			Port:     getEnvInt("POSTGRES_PORT", 5432),
+		},
+		GRPC: GRPCConfig{
+			Port: getEnvInt("GRPC_PORT", 50051),
 		},
 	}, nil
 }
