@@ -35,10 +35,6 @@ func main() {
 	}
 	defer db.Close()
 
-	if os.Getenv("RUN_REPO_SMOKE") == "1" {
-		runRepoSmokeTest(context.Background(), log, db)
-	}
-
 	log.Info("server is starting", zap.String("env", cfg.Logger.Env))
 
 	quit := make(chan os.Signal, 1)
