@@ -36,3 +36,8 @@ Thumbs.db
 
 # Local docs
 plans/
+AGENTS.md
+
+# Generated code and mocks
+pkg/grpc/gen/
+internal/core/ports/mocks/
