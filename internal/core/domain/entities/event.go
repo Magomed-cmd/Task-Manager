@@ -1,7 +1,6 @@
 package entities
 
 import (
-	"encoding/json"
 	"time"
 
 	"task-manager/internal/core/domain/exceptions"
@@ -21,22 +20,18 @@ type TaskEvent struct {
 	userID      string
 	roomID      string
 	eventType   TaskEventType
-	payload     json.RawMessage
+	payload     *ProgressPayload
 	createdAt   time.Time
 	processedAt time.Time
 }
 
-func NewTaskEvent(eventID, userID, roomID string, eventType TaskEventType, payload json.RawMessage, createdAt time.Time) (*TaskEvent, error) {
-	var payloadCopy json.RawMessage
-	if len(payload) > 0 {
-		payloadCopy = append(json.RawMessage(nil), payload...)
-	}
+func NewTaskEvent(eventID, userID, roomID string, eventType TaskEventType, payload *ProgressPayload, createdAt time.Time) (*TaskEvent, error) {
 	event := &TaskEvent{
 		eventID:   eventID,
 		userID:    userID,
 		roomID:    roomID,
 		eventType: eventType,
-		payload:   payloadCopy,
+		payload:   payload,
 		createdAt: createdAt,
 	}
 	if err := event.Validate(); err != nil {
@@ -61,11 +56,14 @@ func (e *TaskEvent) Type() TaskEventType {
 	return e.eventType
 }
 
-func (e *TaskEvent) Payload() json.RawMessage {
-	if len(e.payload) == 0 {
+func (e *TaskEvent) Payload() *ProgressPayload {
+	if e.payload == nil {
 		return nil
 	}
-	return append(json.RawMessage(nil), e.payload...)
+	return &ProgressPayload{
+		TaskID: e.payload.TaskID,
+		Amount: e.payload.Amount,
+	}
 }
 
 func (e *TaskEvent) CreatedAt() time.Time {
@@ -93,5 +91,22 @@ func (e *TaskEvent) Validate() error {
 	if e.eventType == "" {
 		return exceptions.ErrEventTypeRequired
 	}
+	if e.requiresProgressPayload() {
+		if e.payload == nil {
+			return exceptions.ErrEventPayloadInvalid
+		}
+		if err := e.payload.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (e *TaskEvent) requiresProgressPayload() bool {
+	switch e.eventType {
+	case EventTypeProgressUpdate, EventTypeTaskSubscribed, EventTypeTaskStepCounted:
+		return true
+	default:
+		return false
+	}
 }

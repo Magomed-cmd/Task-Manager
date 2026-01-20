@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -106,11 +105,7 @@ func (s *TaskService) ProcessEvent(ctx context.Context, event *entities.TaskEven
 			entities.EventTypeTaskSubscribed,
 			entities.EventTypeTaskStepCounted:
 			// TODO: Обсудить, как дальше обрабатывать все типы событий.
-			payload, err := parseProgressPayload(event.Payload())
-			if err != nil {
-				s.log.Warn("usecase: process event failed", zap.Error(err))
-				return err
-			}
+			payload := event.Payload()
 			if err := s.applyProgressUpdate(ctx, repos, event.UserID(), payload.TaskID, payload.Amount); err != nil {
 				s.log.Warn("usecase: process event failed", zap.Error(err))
 				return err
@@ -166,7 +161,7 @@ func (s *TaskService) applyProgressUpdate(ctx context.Context, repos ports.Repos
 	}
 
 	if !task.IsActive() {
-		return nil
+		return exceptions.ErrTaskInactive
 	}
 
 	now := s.now()
@@ -188,26 +183,4 @@ func (s *TaskService) applyProgressUpdate(ctx context.Context, repos ports.Repos
 	progress.AddProgress(amount, task.Target())
 	progress.SetUpdatedAt(now)
 	return repos.Progress.Update(ctx, progress)
-}
-
-type progressPayload struct {
-	TaskID string `json:"task_id"`
-	Amount int    `json:"amount"`
-}
-
-func parseProgressPayload(payload json.RawMessage) (*progressPayload, error) {
-	if len(payload) == 0 {
-		return nil, exceptions.ErrEventPayloadInvalid
-	}
-	var parsed progressPayload
-	if err := json.Unmarshal(payload, &parsed); err != nil {
-		return nil, exceptions.ErrEventPayloadInvalid
-	}
-	if parsed.TaskID == "" {
-		return nil, exceptions.ErrEventTaskIDRequired
-	}
-	if parsed.Amount <= 0 {
-		return nil, exceptions.ErrEventAmountInvalid
-	}
-	return &parsed, nil
 }

@@ -65,13 +65,17 @@ func Event(event *tasksv1.TaskEvent) (*entities.TaskEvent, error) {
 		return nil, exceptions.ErrEventNil
 	}
 
-	var payload json.RawMessage
+	var payload *entities.ProgressPayload
 	if event.Payload != nil {
 		raw, err := protojson.Marshal(event.Payload)
 		if err != nil {
 			return nil, err
 		}
-		payload = raw
+		var parsed entities.ProgressPayload
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, exceptions.ErrEventPayloadInvalid
+		}
+		payload = &parsed
 	}
 
 	createdAt := time.Time{}
@@ -98,7 +102,8 @@ func Error(err error) error {
 		errors.Is(err, exceptions.ErrProgressNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, exceptions.ErrTaskNotCompleted),
-		errors.Is(err, exceptions.ErrRewardAlreadyClaimed):
+		errors.Is(err, exceptions.ErrRewardAlreadyClaimed),
+		errors.Is(err, exceptions.ErrTaskInactive):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, exceptions.ErrEventNil),
 		errors.Is(err, exceptions.ErrEventIDRequired),

@@ -7,6 +7,7 @@ var (
 	ErrRewardAlreadyClaimed = errors.New("reward already claimed")
 	ErrTaskNotFound         = errors.New("task not found")
 	ErrProgressNotFound     = errors.New("progress not found")
+	ErrTaskInactive         = errors.New("task is inactive")
 	ErrEventNil             = errors.New("event is nil")
 	ErrEventIDRequired      = errors.New("event_id is required")
 	ErrEventUserIDRequired  = errors.New("user_id is required")
