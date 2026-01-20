@@ -2,6 +2,8 @@ package grpc
 
 import (
 	"context"
+	"io"
+	"time"
 
 	"task-manager/internal/core/ports"
 	"task-manager/internal/mapper"
@@ -11,6 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+var progressStreamInterval = 2 * time.Second
 
 type TaskServer struct {
 	tasksv1.UnimplementedTaskServiceServer
@@ -90,6 +94,99 @@ func (s *TaskServer) ProcessEvent(ctx context.Context, req *tasksv1.ProcessEvent
 	return &tasksv1.ProcessEventResponse{
 		Accepted: true,
 	}, nil
+}
+
+func (s *TaskServer) StreamEvents(stream tasksv1.TaskService_StreamEventsServer) error {
+	s.log.Info("grpc: stream events started")
+	var accepted int32
+	var rejected int32
+
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			s.log.Info("grpc: stream events done", zap.Int32("accepted", accepted), zap.Int32("rejected", rejected))
+			return stream.SendAndClose(&tasksv1.StreamEventsResponse{
+				Accepted: accepted,
+				Rejected: rejected,
+			})
+		}
+		if err != nil {
+			s.log.Error("grpc: stream events recv failed", zap.Error(err))
+			return status.Error(codes.Internal, err.Error())
+		}
+
+		if len(req.GetEvents()) == 0 {
+			s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "events are required")))
+			continue
+		}
+
+		for _, event := range req.GetEvents() {
+			if event == nil {
+				rejected++
+				s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "event is required")))
+				continue
+			}
+			if err := event.ValidateAll(); err != nil {
+				rejected++
+				s.log.Warn("grpc: stream events validation failed", zap.Error(err))
+				continue
+			}
+
+			domainEvent, err := mapper.Event(event)
+			if err != nil {
+				rejected++
+				s.log.Warn("grpc: stream events mapping failed", zap.Error(err))
+				continue
+			}
+
+			if err := s.service.ProcessEvent(stream.Context(), domainEvent); err != nil {
+				rejected++
+				s.log.Warn("grpc: stream events processing failed", zap.Error(err))
+				continue
+			}
+
+			accepted++
+		}
+	}
+}
+
+func (s *TaskServer) SubscribeProgress(req *tasksv1.SubscribeProgressRequest, stream tasksv1.TaskService_SubscribeProgressServer) error {
+	
+	s.log.Info("grpc: subscribe progress", zap.String("user_id", req.GetUserId()))
+	if err := req.ValidateAll(); err != nil {
+		s.log.Warn("grpc: subscribe progress validation failed", zap.Error(err))
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	send := func() error {
+		tasks, progress, err := s.service.GetTasksWithProgress(stream.Context(), req.GetUserId())
+		if err != nil {
+			s.log.Error("grpc: subscribe progress failed", zap.Error(err))
+			return mapper.Error(err)
+		}
+		if err := stream.Send(mapper.TasksWithProgress(tasks, progress)); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := send(); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(progressStreamInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case <-ticker.C:
+			if err := send(); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *TaskServer) ClaimReward(ctx context.Context, req *tasksv1.ClaimRewardRequest) (*tasksv1.ClaimRewardResponse, error) {

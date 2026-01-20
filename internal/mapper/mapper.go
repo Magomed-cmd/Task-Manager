@@ -1,7 +1,6 @@
 package mapper
 
 import (
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -67,15 +65,10 @@ func Event(event *tasksv1.TaskEvent) (*entities.TaskEvent, error) {
 
 	var payload *entities.ProgressPayload
 	if event.Payload != nil {
-		raw, err := protojson.Marshal(event.Payload)
-		if err != nil {
-			return nil, err
+		payload = &entities.ProgressPayload{
+			TaskID: event.Payload.GetTaskId(),
+			Amount: int(event.Payload.GetAmount()),
 		}
-		var parsed entities.ProgressPayload
-		if err := json.Unmarshal(raw, &parsed); err != nil {
-			return nil, exceptions.ErrEventPayloadInvalid
-		}
-		payload = &parsed
 	}
 
 	createdAt := time.Time{}

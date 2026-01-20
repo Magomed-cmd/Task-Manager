@@ -73,3 +73,14 @@ tasks:
           --go-grpc_out=pkg/grpc/gen --go-grpc_opt=paths=source_relative \
           --validate_out=lang=go,paths=source_relative:pkg/grpc/gen \
           $(find api/proto -name '*.proto')
+
+  grpc:stress:
+    desc: Run high-load gRPC stress test (requires TASK_ID env).
+    cmds:
+      - |
+        GRPC_TARGET=localhost:50051 \
+        CONCURRENCY=128 \
+        BATCH_SIZE=200 \
+        DURATION_SEC=120 \
+        TASK_ID=${TASK_ID} \
+        node scripts/grpc_tools.js stress

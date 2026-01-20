@@ -141,6 +141,9 @@ func (s *TaskService) ClaimReward(ctx context.Context, userID string, taskID str
 			return err
 		}
 		if err := progress.MarkClaimed(); err != nil {
+			if errors.Is(err, exceptions.ErrRewardAlreadyClaimed) {
+				return nil
+			}
 			return err
 		}
 

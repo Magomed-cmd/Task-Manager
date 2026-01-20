@@ -41,3 +41,4 @@ AGENTS.md
 # Generated code and mocks
 pkg/grpc/gen/
 internal/core/ports/mocks/
+grpc_errors.txt
