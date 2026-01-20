@@ -6,7 +6,6 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.3.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
-	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11

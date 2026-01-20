@@ -38,7 +38,7 @@ message TaskProgress {
 
 message TaskEvent {
   string event_id = 1 [(validate.rules).string = {min_len: 1, uuid: true}];
-  string user_id = 2 [(validate.rules).string.min_len = 1];
+  string user_id = 2 [(validate.rules).string = {min_len: 1, uuid: true}];
   string room_id = 3;
   string type = 4 [(validate.rules).string.min_len = 1];
   google.protobuf.Struct payload = 5;
@@ -46,7 +46,7 @@ message TaskEvent {
 }
 
 message GetTasksWithProgressRequest {
-  string user_id = 1 [(validate.rules).string.min_len = 1];
+  string user_id = 1 [(validate.rules).string = {min_len: 1, uuid: true}];
 }
 
 message GetTasksWithProgressResponse {
@@ -72,7 +72,7 @@ message ProcessEventResponse {
 }
 
 message ClaimRewardRequest {
-  string user_id = 1 [(validate.rules).string.min_len = 1];
+  string user_id = 1 [(validate.rules).string = {min_len: 1, uuid: true}];
   string task_id = 2 [(validate.rules).string = {min_len: 1, uuid: true}];
 }
 

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 
 	"task-manager/internal/core/domain/entities"
 	"task-manager/internal/infrastructure/db"
@@ -42,10 +43,14 @@ func (r *EventRepository) MarkProcessed(ctx context.Context, event *entities.Tas
 		VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, NOW()))
 		ON CONFLICT (event_id) DO NOTHING`
 
-	payloadBytes := event.Payload()
-	payload := any(payloadBytes)
-	if len(payloadBytes) == 0 {
-		payload = nil
+	payload := any(nil)
+	if payloadValue := event.Payload(); payloadValue != nil {
+		payloadBytes, err := json.Marshal(payloadValue)
+		if err != nil {
+			r.log.Error("failed to marshal event payload", zap.Error(err))
+			return err
+		}
+		payload = payloadBytes
 	}
 
 	createdAtValue := event.CreatedAt()
