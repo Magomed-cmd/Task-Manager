@@ -117,3 +117,40 @@ func (r *ProgressRepository) Update(ctx context.Context, progress *entities.Task
 	progress.SetID(id)
 	return nil
 }
+
+func (r *ProgressRepository) Claim(ctx context.Context, userID string, taskID string) error {
+	query := `UPDATE task_progress
+		SET claimed = true, updated_at = NOW()
+		WHERE user_id = $1 AND task_id = $2 AND claimed = false AND completed = true
+		RETURNING id`
+
+	var id string
+	if err := r.db.QueryRow(ctx, query, userID, taskID).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return r.claimStateError(ctx, userID, taskID)
+		}
+		r.log.Error("failed to claim task reward", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+func (r *ProgressRepository) claimStateError(ctx context.Context, userID string, taskID string) error {
+	query := `SELECT completed, claimed FROM task_progress WHERE user_id = $1 AND task_id = $2`
+
+	var completed, claimed bool
+	if err := r.db.QueryRow(ctx, query, userID, taskID).Scan(&completed, &claimed); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return exceptions.ErrProgressNotFound
+		}
+		r.log.Error("failed to check claim state", zap.Error(err))
+		return err
+	}
+	if !completed {
+		return exceptions.ErrTaskNotCompleted
+	}
+	if claimed {
+		return exceptions.ErrRewardAlreadyClaimed
+	}
+	return errors.New("claim reward failed")
+}

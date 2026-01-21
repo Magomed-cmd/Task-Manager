@@ -136,18 +136,14 @@ func (s *TaskService) ClaimReward(ctx context.Context, userID string, taskID str
 			return err
 		}
 
-		progress, err := repos.Progress.Get(ctx, userID, taskID)
-		if err != nil {
-			return err
-		}
-		if err := progress.MarkClaimed(); err != nil {
+		if err := repos.Progress.Claim(ctx, userID, taskID); err != nil {
 			if errors.Is(err, exceptions.ErrRewardAlreadyClaimed) {
 				return nil
 			}
 			return err
 		}
 
-		return repos.Progress.Update(ctx, progress)
+		return nil
 	})
 	if err != nil {
 		s.log.Warn("usecase: claim reward failed", zap.Error(err))

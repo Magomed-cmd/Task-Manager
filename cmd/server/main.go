@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
 	"task-manager/internal/infrastructure/app"
 
 	"go.uber.org/zap"
