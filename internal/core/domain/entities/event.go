@@ -9,10 +9,9 @@ import (
 type TaskEventType string
 
 const (
-	EventTypeProgressUpdate TaskEventType = "progress_update"
-	EventTypeTaskSubscribed TaskEventType = "task_subscribed"
+	EventTypeProgressUpdate  TaskEventType = "progress_update"
+	EventTypeTaskSubscribed  TaskEventType = "task_subscribed"
 	EventTypeTaskStepCounted TaskEventType = "task_step_counted"
-	EventTypeClaimReward    TaskEventType = "claim_reward"
 )
 
 type TaskEvent struct {
@@ -91,6 +90,9 @@ func (e *TaskEvent) Validate() error {
 	if e.eventType == "" {
 		return exceptions.ErrEventTypeRequired
 	}
+	if !e.isSupportedEventType() {
+		return exceptions.ErrUnsupportedEventType
+	}
 	if e.requiresProgressPayload() {
 		if e.payload == nil {
 			return exceptions.ErrEventPayloadInvalid
@@ -103,6 +105,15 @@ func (e *TaskEvent) Validate() error {
 }
 
 func (e *TaskEvent) requiresProgressPayload() bool {
+	switch e.eventType {
+	case EventTypeProgressUpdate, EventTypeTaskSubscribed, EventTypeTaskStepCounted:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e *TaskEvent) isSupportedEventType() bool {
 	switch e.eventType {
 	case EventTypeProgressUpdate, EventTypeTaskSubscribed, EventTypeTaskStepCounted:
 		return true
