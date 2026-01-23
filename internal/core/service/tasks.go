@@ -163,23 +163,5 @@ func (s *TaskService) applyProgressUpdate(ctx context.Context, repos ports.Repos
 		return exceptions.ErrTaskInactive
 	}
 
-	now := s.now()
-	progress, err := repos.Progress.Get(ctx, userID, task.ID())
-	if err != nil {
-		if !errors.Is(err, exceptions.ErrProgressNotFound) {
-			return err
-		}
-		progress = entities.NewTaskProgress(task.ID(), userID)
-		progress.AddProgress(amount, task.Target())
-		progress.SetUpdatedAt(now)
-		return repos.Progress.Create(ctx, progress)
-	}
-
-	if progress.Completed() {
-		return nil
-	}
-
-	progress.AddProgress(amount, task.Target())
-	progress.SetUpdatedAt(now)
-	return repos.Progress.Update(ctx, progress)
+	return repos.Progress.AddProgress(ctx, userID, task.ID(), amount, task.Target(), s.now())
 }

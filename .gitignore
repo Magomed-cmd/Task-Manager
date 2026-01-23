@@ -40,6 +40,10 @@ AGENTS.md
 CLAIM_REWARD_RACE_NOTES.md
 ПРАВКИ.md
 
+# Local scripts
+scripts/claim_reward/
+scripts/progress_race/
+
 # Generated code and mocks
 pkg/grpc/gen/
 internal/core/ports/mocks/

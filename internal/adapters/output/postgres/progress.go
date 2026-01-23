@@ -12,12 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// type ProgressRepository interface {
-// 	Get(ctx context.Context, userID string, taskID string) (*entities.TaskProgress, error)
-// 	Create(ctx context.Context, progress *entities.TaskProgress) error
-// 	Update(ctx context.Context, progress *entities.TaskProgress) error
-// }
-
 type ProgressRepository struct {
 	db  db.Querier
 	log *zap.Logger
@@ -115,6 +109,35 @@ func (r *ProgressRepository) Update(ctx context.Context, progress *entities.Task
 		return err
 	}
 	progress.SetID(id)
+	return nil
+}
+
+func (r *ProgressRepository) AddProgress(ctx context.Context, userID string, taskID string, amount int, target int, updatedAt time.Time) error {
+	query := `INSERT INTO task_progress (task_id, user_id, progress, completed, claimed, updated_at)
+		VALUES ($1, $2, LEAST($3::int, $4::int), $3::int >= $4::int, false, COALESCE($5, NOW()))
+		ON CONFLICT (user_id, task_id) DO UPDATE
+		SET progress = LEAST(task_progress.progress + EXCLUDED.progress, $4::int),
+			completed = task_progress.completed OR (task_progress.progress + EXCLUDED.progress >= $4::int),
+			updated_at = EXCLUDED.updated_at
+		WHERE task_progress.completed = false`
+
+	updatedAtValue := any(updatedAt)
+	if updatedAt.IsZero() {
+		updatedAtValue = nil
+	}
+
+	if _, err := r.db.Exec(
+		ctx,
+		query,
+		taskID,
+		userID,
+		amount,
+		target,
+		updatedAtValue,
+	); err != nil {
+		r.log.Error("failed to add task progress", zap.Error(err))
+		return err
+	}
 	return nil
 }
 
