@@ -37,8 +37,6 @@ Thumbs.db
 # Local docs
 plans/
 AGENTS.md
-CLAIM_REWARD_RACE_NOTES.md
-ПРАВКИ.md
 
 # Local scripts
 scripts/claim_reward/
@@ -48,3 +46,6 @@ scripts/progress_race/
 pkg/grpc/gen/
 internal/core/ports/mocks/
 grpc_errors.txt
+musor/
+todo/
+/scripts
