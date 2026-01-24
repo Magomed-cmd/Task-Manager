@@ -137,7 +137,7 @@ func (s *TaskService) ProcessEvents(ctx context.Context, events []*entities.Task
 		return nil
 	})
 	if err != nil {
-		return accepted, rejected, err
+		return 0, rejected, err
 	}
 	return accepted, rejected, nil
 }
@@ -200,8 +200,7 @@ func (s *TaskService) processEventWithRepos(ctx context.Context, repos ports.Rep
 func isNonFatalEventError(err error) bool {
 	return errors.Is(err, exceptions.ErrUnsupportedEventType) ||
 		errors.Is(err, exceptions.ErrTaskNotFound) ||
-		errors.Is(err, exceptions.ErrTaskInactive) ||
-		errors.Is(err, exceptions.ErrProgressNotFound)
+		errors.Is(err, exceptions.ErrTaskInactive)
 }
 
 func (s *TaskService) applyProgressUpdate(ctx context.Context, repos ports.Repositories, userID string, taskID string, amount int) error {

@@ -37,6 +37,7 @@ Thumbs.db
 # Local docs
 plans/
 AGENTS.md
+CLAUDE.md
 
 # Local scripts
 scripts/claim_reward/
