@@ -90,41 +90,56 @@ func (s *TaskService) ProcessEvent(ctx context.Context, event *entities.TaskEven
 	return s.uow.Do(ctx, func(uow ports.UnitOfWork) error {
 		repos := uow.Repositories()
 
-		processed, err := repos.Events.IsProcessed(ctx, event.EventID())
-		if err != nil {
-			s.log.Warn("usecase: process event failed", zap.Error(err))
-			return err
-		}
-		if processed {
-			s.log.Debug("usecase: event already processed", zap.String("event_id", event.EventID()))
-			return nil
-		}
-
-		switch event.Type() {
-		case entities.EventTypeProgressUpdate,
-			entities.EventTypeTaskSubscribed,
-			entities.EventTypeTaskStepCounted:
-			// TODO: Обсудить, как дальше обрабатывать все типы событий.
-			payload := event.Payload()
-			if err := s.applyProgressUpdate(ctx, repos, event.UserID(), payload.TaskID, payload.Amount); err != nil {
-				s.log.Warn("usecase: process event failed", zap.Error(err))
-				return err
-			}
-		default:
-			s.log.Warn("usecase: process event failed", zap.Error(exceptions.ErrUnsupportedEventType))
-			return exceptions.ErrUnsupportedEventType
-		}
-
-		if event.ProcessedAt().IsZero() {
-			event.SetProcessedAt(s.now())
-		}
-		if err := repos.Events.MarkProcessed(ctx, event); err != nil {
+		if err := s.processEventWithRepos(ctx, repos, event); err != nil {
 			s.log.Warn("usecase: process event failed", zap.Error(err))
 			return err
 		}
 		s.log.Info("usecase: process event done", zap.String("event_id", event.EventID()))
 		return nil
 	})
+}
+
+func (s *TaskService) ProcessEvents(ctx context.Context, events []*entities.TaskEvent) (int32, int32, error) {
+	if len(events) == 0 {
+		return 0, 0, nil
+	}
+
+	var rejected int32
+	valid := make([]*entities.TaskEvent, 0, len(events))
+	for _, event := range events {
+		if event == nil {
+			rejected++
+			continue
+		}
+		if err := event.Validate(); err != nil {
+			rejected++
+			continue
+		}
+		valid = append(valid, event)
+	}
+	if len(valid) == 0 {
+		return 0, rejected, nil
+	}
+
+	var accepted int32
+	err := s.uow.Do(ctx, func(uow ports.UnitOfWork) error {
+		repos := uow.Repositories()
+		for _, event := range valid {
+			if err := s.processEventWithRepos(ctx, repos, event); err != nil {
+				if isNonFatalEventError(err) {
+					rejected++
+					continue
+				}
+				return err
+			}
+			accepted++
+		}
+		return nil
+	})
+	if err != nil {
+		return accepted, rejected, err
+	}
+	return accepted, rejected, nil
 }
 
 func (s *TaskService) ClaimReward(ctx context.Context, userID string, taskID string) error {
@@ -151,6 +166,42 @@ func (s *TaskService) ClaimReward(ctx context.Context, userID string, taskID str
 	}
 	s.log.Info("usecase: claim reward done", zap.String("user_id", userID), zap.String("task_id", taskID))
 	return nil
+}
+
+func (s *TaskService) processEventWithRepos(ctx context.Context, repos ports.Repositories, event *entities.TaskEvent) error {
+	processed, err := repos.Events.IsProcessed(ctx, event.EventID())
+	if err != nil {
+		return err
+	}
+	if processed {
+		s.log.Debug("usecase: event already processed", zap.String("event_id", event.EventID()))
+		return nil
+	}
+
+	switch event.Type() {
+	case entities.EventTypeProgressUpdate,
+		entities.EventTypeTaskSubscribed,
+		entities.EventTypeTaskStepCounted:
+		// TODO: Обсудить, как дальше обрабатывать все типы событий.
+		payload := event.Payload()
+		if err := s.applyProgressUpdate(ctx, repos, event.UserID(), payload.TaskID, payload.Amount); err != nil {
+			return err
+		}
+	default:
+		return exceptions.ErrUnsupportedEventType
+	}
+
+	if event.ProcessedAt().IsZero() {
+		event.SetProcessedAt(s.now())
+	}
+	return repos.Events.MarkProcessed(ctx, event)
+}
+
+func isNonFatalEventError(err error) bool {
+	return errors.Is(err, exceptions.ErrUnsupportedEventType) ||
+		errors.Is(err, exceptions.ErrTaskNotFound) ||
+		errors.Is(err, exceptions.ErrTaskInactive) ||
+		errors.Is(err, exceptions.ErrProgressNotFound)
 }
 
 func (s *TaskService) applyProgressUpdate(ctx context.Context, repos ports.Repositories, userID string, taskID string, amount int) error {

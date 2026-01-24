@@ -5,34 +5,70 @@ import (
 	"io"
 	"time"
 
+	"task-manager/internal/core/domain/entities"
 	"task-manager/internal/core/ports"
 	"task-manager/internal/mapper"
 	tasksv1 "task-manager/pkg/grpc/gen/tasks"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
-
-var progressStreamInterval = 2 * time.Second
 
 type TaskServer struct {
 	tasksv1.UnimplementedTaskServiceServer
 	service ports.TaskUseCases
 	log     *zap.Logger
+
+	streamEventsIdleTimeout  time.Duration
+	streamEventsBatchTimeout time.Duration
+	subscribeInterval        time.Duration
+	subscribeMaxPeriod       time.Duration
 }
 
-func NewTaskServer(service ports.TaskUseCases, log *zap.Logger) *TaskServer {
+type streamStats struct {
+	accepted int32
+	rejected int32
+	batches  int32
+	events   int32
+}
+
+func NewTaskServer(
+	service ports.TaskUseCases,
+	log *zap.Logger,
+	streamEventsIdleTimeout time.Duration,
+	streamEventsBatchTimeout time.Duration,
+	subscribeInterval time.Duration,
+	subscribeMaxPeriod time.Duration,
+) *TaskServer {
 	if service == nil {
 		log.Fatal("task service is nil")
 	}
 	if log == nil {
 		panic("logger is nil")
 	}
-	return &TaskServer{
-		service: service,
-		log:     log,
+	server := &TaskServer{
+		service:                  service,
+		log:                      log,
+		streamEventsIdleTimeout:  streamEventsIdleTimeout,
+		streamEventsBatchTimeout: streamEventsBatchTimeout,
+		subscribeInterval:        subscribeInterval,
+		subscribeMaxPeriod:       subscribeMaxPeriod,
 	}
+	if server.streamEventsIdleTimeout <= 0 {
+		log.Fatal("stream events idle timeout must be configured")
+	}
+	if server.streamEventsBatchTimeout <= 0 {
+		log.Fatal("stream events batch timeout must be configured")
+	}
+	if server.subscribeInterval <= 0 {
+		log.Fatal("subscribe progress interval must be configured")
+	}
+	if server.subscribeMaxPeriod <= 0 {
+		log.Fatal("subscribe progress max period must be configured")
+	}
+	return server
 }
 
 func (s *TaskServer) GetTasksWithProgress(ctx context.Context, req *tasksv1.GetTasksWithProgressRequest) (*tasksv1.GetTasksWithProgressResponse, error) {
@@ -67,9 +103,7 @@ func (s *TaskServer) GetTask(ctx context.Context, req *tasksv1.GetTaskRequest) (
 	}
 
 	s.log.Info("grpc: get task done", zap.String("task_id", req.GetTaskId()))
-	return &tasksv1.GetTaskResponse{
-		Task: mapper.Task(task),
-	}, nil
+	return &tasksv1.GetTaskResponse{Task: mapper.Task(task)}, nil
 }
 
 func (s *TaskServer) ProcessEvent(ctx context.Context, req *tasksv1.ProcessEventRequest) (*tasksv1.ProcessEventResponse, error) {
@@ -91,67 +125,108 @@ func (s *TaskServer) ProcessEvent(ctx context.Context, req *tasksv1.ProcessEvent
 	}
 
 	s.log.Info("grpc: process event done", zap.String("event_id", event.EventID()))
-	return &tasksv1.ProcessEventResponse{
-		Accepted: true,
-	}, nil
+	return &tasksv1.ProcessEventResponse{Accepted: true}, nil
 }
 
 func (s *TaskServer) StreamEvents(stream tasksv1.TaskService_StreamEventsServer) error {
-	s.log.Info("grpc: stream events started")
-	var accepted int32
-	var rejected int32
+	streamID := nextStreamID()
+	remote := ""
+	if p, ok := peer.FromContext(stream.Context()); ok && p.Addr != nil {
+		remote = p.Addr.String()
+	}
+	startedAt := time.Now()
+
+	s.log.Info("grpc: stream events started", zap.Uint64("stream_id", streamID), zap.String("remote", remote))
+	stats := streamStats{}
+
+	idleTimer := time.NewTimer(s.streamEventsIdleTimeout)
+	defer idleTimer.Stop()
+	recvCh := startRecvLoop(stream)
+	var recvErr error
 
 	for {
-		req, err := stream.Recv()
-		if err == io.EOF {
-			s.log.Info("grpc: stream events done", zap.Int32("accepted", accepted), zap.Int32("rejected", rejected))
-			return stream.SendAndClose(&tasksv1.StreamEventsResponse{
-				Accepted: accepted,
-				Rejected: rejected,
-			})
-		}
-		if err != nil {
-			s.log.Error("grpc: stream events recv failed", zap.Error(err))
-			return status.Error(codes.Internal, err.Error())
-		}
-
-		if len(req.GetEvents()) == 0 {
-			s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "events are required")))
-			continue
-		}
-
-		for _, event := range req.GetEvents() {
-			if event == nil {
-				rejected++
-				s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "event is required")))
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-idleTimer.C:
+			return s.finishStream(errStreamIdleTimeout, stream, stats.accepted, stats.rejected, stats.batches, stats.events, startedAt, streamID, remote)
+		case res, ok := <-recvCh:
+			if !ok {
+				err := recvErr
+				if err == nil {
+					if ctxErr := stream.Context().Err(); ctxErr != nil {
+						err = ctxErr
+					} else {
+						err = io.EOF
+					}
+				}
+				return s.finishStream(err, stream, stats.accepted, stats.rejected, stats.batches, stats.events, startedAt, streamID, remote)
+			}
+			if res.err != nil {
+				recvErr = res.err
 				continue
 			}
-			if err := event.ValidateAll(); err != nil {
-				rejected++
-				s.log.Warn("grpc: stream events validation failed", zap.Error(err))
-				continue
-			}
+			req := res.req
+			resetTimer(idleTimer, s.streamEventsIdleTimeout)
+			stats.batches++
+			stats.events += int32(len(req.GetEvents()))
 
-			domainEvent, err := mapper.Event(event)
+			domainEvents, rejectedInBatch, err := s.mapEvents(req)
+			stats.rejected += rejectedInBatch
 			if err != nil {
-				rejected++
-				s.log.Warn("grpc: stream events mapping failed", zap.Error(err))
+				return err
+			}
+			if len(domainEvents) == 0 {
 				continue
 			}
 
-			if err := s.service.ProcessEvent(stream.Context(), domainEvent); err != nil {
-				rejected++
+			batchAccepted, batchRejected, err := s.processBatch(stream.Context(), domainEvents)
+			if err != nil {
 				s.log.Warn("grpc: stream events processing failed", zap.Error(err))
-				continue
+				return mapper.Error(err)
 			}
 
-			accepted++
+			stats.accepted += batchAccepted
+			stats.rejected += batchRejected
 		}
 	}
 }
 
+func (s *TaskServer) mapEvents(req *tasksv1.StreamEventsRequest) ([]*entities.TaskEvent, int32, error) {
+	if len(req.GetEvents()) == 0 {
+		s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "events are required")))
+		return nil, 0, status.Error(codes.InvalidArgument, "events are required")
+	}
+
+	var rejected int32
+	domainEvents := make([]*entities.TaskEvent, 0, len(req.GetEvents()))
+
+	for _, event := range req.GetEvents() {
+		if event == nil {
+			rejected++
+			s.log.Warn("grpc: stream events validation failed", zap.Error(status.Error(codes.InvalidArgument, "event is required")))
+			continue
+		}
+		if err := event.ValidateAll(); err != nil {
+			rejected++
+			s.log.Warn("grpc: stream events validation failed", zap.Error(err))
+			continue
+		}
+
+		domainEvent, err := mapper.Event(event)
+		if err != nil {
+			rejected++
+			s.log.Warn("grpc: stream events mapping failed", zap.Error(err))
+			continue
+		}
+		domainEvents = append(domainEvents, domainEvent)
+	}
+
+	return domainEvents, rejected, nil
+}
+
 func (s *TaskServer) SubscribeProgress(req *tasksv1.SubscribeProgressRequest, stream tasksv1.TaskService_SubscribeProgressServer) error {
-	
+
 	s.log.Info("grpc: subscribe progress", zap.String("user_id", req.GetUserId()))
 	if err := req.ValidateAll(); err != nil {
 		s.log.Warn("grpc: subscribe progress validation failed", zap.Error(err))
@@ -174,13 +249,18 @@ func (s *TaskServer) SubscribeProgress(req *tasksv1.SubscribeProgressRequest, st
 		return err
 	}
 
-	ticker := time.NewTicker(progressStreamInterval)
+	ticker := time.NewTicker(s.subscribeInterval)
 	defer ticker.Stop()
+	timeout := time.NewTimer(s.subscribeMaxPeriod)
+	defer timeout.Stop()
 
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
+		case <-timeout.C:
+			s.log.Warn("grpc: subscribe progress timeout", zap.String("user_id", req.GetUserId()))
+			return status.Error(codes.DeadlineExceeded, "stream timeout")
 		case <-ticker.C:
 			if err := send(); err != nil {
 				return err

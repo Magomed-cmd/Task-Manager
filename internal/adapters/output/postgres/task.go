@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"task-manager/internal/core/domain/entities"
 	"task-manager/internal/core/domain/exceptions"
@@ -37,7 +38,7 @@ func (r *TaskRepository) GetByID(ctx context.Context, id string) (*entities.Task
 	var (
 		taskID      string
 		title       string
-		description string
+		description sql.NullString
 		taskType    entities.TaskType
 		target      int
 		reward      []byte
@@ -60,7 +61,11 @@ func (r *TaskRepository) GetByID(ctx context.Context, id string) (*entities.Task
 		}
 		return nil, err
 	}
-	return entities.NewTask(taskID, title, description, taskType, target, reward, isActive, createdAt), nil
+	desc := ""
+	if description.Valid {
+		desc = description.String
+	}
+	return entities.NewTask(taskID, title, desc, taskType, target, reward, isActive, createdAt), nil
 }
 
 func (r *TaskRepository) ListActive(ctx context.Context) ([]*entities.Task, error) {
@@ -79,7 +84,7 @@ func (r *TaskRepository) ListActive(ctx context.Context) ([]*entities.Task, erro
 		var (
 			taskID      string
 			title       string
-			description string
+			description sql.NullString
 			taskType    entities.TaskType
 			target      int
 			reward      []byte
@@ -99,7 +104,11 @@ func (r *TaskRepository) ListActive(ctx context.Context) ([]*entities.Task, erro
 			r.log.Error("failed to scan task row", zap.Error(err))
 			return nil, err
 		}
-		tasks = append(tasks, entities.NewTask(taskID, title, description, taskType, target, reward, isActive, createdAt))
+		desc := ""
+		if description.Valid {
+			desc = description.String
+		}
+		tasks = append(tasks, entities.NewTask(taskID, title, desc, taskType, target, reward, isActive, createdAt))
 	}
 
 	if err := rows.Err(); err != nil {

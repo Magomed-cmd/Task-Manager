@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -28,7 +29,11 @@ type DatabaseConfig struct {
 }
 
 type GRPCConfig struct {
-	Port int
+	Port                       int
+	StreamEventsIdleTimeout    time.Duration
+	StreamEventsBatchTimeout   time.Duration
+	SubscribeProgressInterval  time.Duration
+	SubscribeProgressMaxPeriod time.Duration
 }
 
 func Load() (*Config, error) {
@@ -47,7 +52,11 @@ func Load() (*Config, error) {
 			Port:     getEnvInt("POSTGRES_PORT", 5432),
 		},
 		GRPC: GRPCConfig{
-			Port: getEnvInt("GRPC_PORT", 50051),
+			Port:                       getEnvInt("GRPC_PORT", 50051),
+			StreamEventsIdleTimeout:    getEnvDuration("GRPC_STREAM_EVENTS_IDLE_TIMEOUT", 30*time.Second),
+			StreamEventsBatchTimeout:   getEnvDuration("GRPC_STREAM_EVENTS_BATCH_TIMEOUT", 5*time.Second),
+			SubscribeProgressInterval:  getEnvDuration("GRPC_SUBSCRIBE_PROGRESS_INTERVAL", 2*time.Second),
+			SubscribeProgressMaxPeriod: getEnvDuration("GRPC_SUBSCRIBE_PROGRESS_MAX_PERIOD", 5*time.Minute),
 		},
 	}, nil
 }
@@ -72,6 +81,15 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
 		}
 	}
 	return defaultValue

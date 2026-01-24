@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+
 )
 
 type App struct {
@@ -75,7 +76,14 @@ func Init() (*App, error) {
 	}
 
 	grpcServer := grpc.NewServer()
-	tasksv1.RegisterTaskServiceServer(grpcServer, grpcadapter.NewTaskServer(taskService, log))
+	tasksv1.RegisterTaskServiceServer(grpcServer, grpcadapter.NewTaskServer(
+		taskService,
+		log,
+		cfg.GRPC.StreamEventsIdleTimeout,
+		cfg.GRPC.StreamEventsBatchTimeout,
+		cfg.GRPC.SubscribeProgressInterval,
+		cfg.GRPC.SubscribeProgressMaxPeriod,
+	))
 	reflection.Register(grpcServer)
 
 	return &App{
